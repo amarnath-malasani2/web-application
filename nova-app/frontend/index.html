@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #121212;
+            color: white;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .container {
+            width: 95%;
+            max-width: 1400px;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px;
+            background: #1a1a1a;
+            border-bottom: 2px solid #444;
+            width: 100%;
+        }
+
+        .live-label {
+            font-size: 22px;
+            font-weight: bold;
+            color: red;
+        }
+
+        .timer {
+            font-size: 20px;
+            margin-top: 5px;
+        }
+
+        .leave-button {
+            background: red;
+            border: none;
+            padding: 12px 18px;
+            font-size: 18px;
+            cursor: pointer;
+            border-radius: 5px;
+            color: white;
+        }
+
+        .content {
+            display: flex;
+            gap: 30px;
+            margin-top: 20px;
+            width: 100%;
+        }
+
+        .interviewer-section,
+        .copilot-section {
+            flex: 1;
+            background: #1a1a1a;
+            padding: 25px;
+            border-radius: 10px;
+        }
+
+        .meeting-room {
+            background: black;
+            padding: 25px;
+            text-align: center;
+            border-radius: 10px;
+            margin-top: 10px;
+        }
+
+        button {
+            background: orange;
+            border: none;
+            padding: 12px 18px;
+            font-size: 18px;
+            cursor: pointer;
+            border-radius: 5px;
+            color: white;
+        }
+
+        .status-dot.ready {
+            color: limegreen;
+            font-weight: bold;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .input-box {
+            margin-top: 10px;
+            display: flex;
+            gap: 10px;
+        }
+
+        .input-box input {
+            flex: 1;
+            padding: 8px;
+            font-size: 16px;
+            border-radius: 5px;
+            border: none;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <span class="live-label">Live</span>
+            <p class="timer" id="timer">00:00</p>
+            <button class="leave-button" id="leave">Leave</button>
+        </header>
+        <div class="content">
+            <div class="interviewer-section">
+                <div class="meeting-room">
+                    <p>Share Screen</p>
+                    <button id="select-room">Select</button>
+                </div>
+            </div>
+            <div class="copilot-section">
+                <button id="generate-link">Generate Link</button>
+                <div id="link-box" class="input-box hidden" style="margin-top: 40px;">
+                    <input type="text" id="generated-link" readonly value="https://example.com/generated-link">
+                    <button onclick="copyLink()">Copy</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script>
+        let timerInterval;
+        let seconds = 0;
+        let mediaRecorder;
+        let ws = new WebSocket('ws://localhost:8000/audio');
+
+        function updateTimer() {
+            seconds++;
+            let minutes = Math.floor(seconds / 60);
+            let secs = seconds % 60;
+            document.getElementById('timer').textContent =
+                (minutes < 10 ? '0' : '') + minutes + ':' + (secs < 10 ? '0' : '') + secs;
+        }
+
+        document.getElementById('select-room').addEventListener('click', async function () {
+            try {
+                const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+                const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                const combinedStream = new MediaStream([...stream.getTracks(), ...audioStream.getTracks()]);
+
+                const videoElement = document.createElement('video');
+                videoElement.srcObject = combinedStream;
+                videoElement.autoplay = true;
+                videoElement.style.width = '100%';
+                videoElement.style.borderRadius = '10px';
+                document.querySelector('.meeting-room').innerHTML = '';
+                document.querySelector('.meeting-room').appendChild(videoElement);
+
+                ws = new WebSocket('wss://your-backend-url.com/audio'); // Replace with actual WebSocket URL
+                let audioChunks = [];
+                mediaRecorder = new MediaRecorder(audioStream);
+                mediaRecorder.ondataavailable = event => audioChunks.push(event.data);
+                mediaRecorder.onstop = async () => {
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                    ws.send(audioBlob);
+                    audioChunks = [];
+                };
+                mediaRecorder.start(1000); // Capture audio in chunks every second
+
+                if (!timerInterval) {
+                    timerInterval = setInterval(updateTimer, 1000);
+                }
+            } catch (error) {
+                alert('Screen sharing failed: ' + error.message);
+            }
+        });
+
+        document.getElementById('leave').addEventListener('click', function () {
+            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                mediaRecorder.stop();
+            }
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.close();
+            }
+            // Stop screen sharing
+            let tracks = document.querySelector('.meeting-room video')?.srcObject?.getTracks();
+            if (tracks) {
+                tracks.forEach(track => track.stop());
+            }
+
+            // Stop the timer
+            clearInterval(timerInterval);
+            timerInterval = null;
+            seconds = 0;
+            document.getElementById('timer').textContent = "00:00";
+
+            // Refresh the page
+            location.reload();
+        });
+
+        document.getElementById('generate-link').addEventListener('click', function () {
+            document.getElementById('link-box').classList.remove('hidden');
+        });
+
+        function copyLink() {
+            let linkInput = document.getElementById('generated-link');
+            linkInput.select();
+            linkInput.setSelectionRange(0, 99999);
+            document.execCommand('copy');
+            alert('Link copied to clipboard!');
+        }
+    </script>
+</body>
+
+</html>

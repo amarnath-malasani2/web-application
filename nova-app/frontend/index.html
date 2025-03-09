@@ -108,6 +108,15 @@
             border-radius: 5px;
             border: none;
         }
+
+        .transcription-result {
+            margin-top: 20px;
+            background: #1a1a1a;
+            padding: 20px;
+            border-radius: 10px;
+            width: 100%;
+            max-width: 800px;
+        }
     </style>
 </head>
 
@@ -133,6 +142,10 @@
                 </div>
             </div>
         </div>
+        <div class="transcription-result" id="transcription-result">
+            <h3>Transcription Result:</h3>
+            <p id="transcription-text">No transcription yet.</p>
+        </div>
     </div>
     <script>
         let timerInterval;
@@ -157,12 +170,13 @@
                 const videoElement = document.createElement('video');
                 videoElement.srcObject = combinedStream;
                 videoElement.autoplay = true;
+                videoElement.muted = true; // Mute the video element to prevent echo
                 videoElement.style.width = '100%';
                 videoElement.style.borderRadius = '10px';
                 document.querySelector('.meeting-room').innerHTML = '';
                 document.querySelector('.meeting-room').appendChild(videoElement);
 
-                ws = new WebSocket('wss://your-backend-url.com/audio'); // Replace with actual WebSocket URL
+                ws = new WebSocket('ws://localhost:8000/audio'); // Updated WebSocket URL
                 let audioChunks = [];
                 mediaRecorder = new MediaRecorder(audioStream);
                 mediaRecorder.ondataavailable = event => audioChunks.push(event.data);
@@ -215,6 +229,11 @@
             document.execCommand('copy');
             alert('Link copied to clipboard!');
         }
+
+        ws.onmessage = function (event) {
+            const transcriptionText = event.data;
+            document.getElementById('transcription-text').textContent = transcriptionText;
+        };
     </script>
 </body>
 
